@@ -77,8 +77,14 @@ pub struct MemoryPtr<T> {
     _type: PhantomData<T>
 }
 
-#[derive(Clone)]
+
 pub struct SyncMemoryPtr<T>(MemoryPtr<T>);
+
+impl<T> Clone for SyncMemoryPtr<T> {
+    fn clone(&self) -> Self {
+        Self(MemoryPtr::clone(&self.0))
+    }
+}
 
 impl<T> SyncMemoryPtr<T> {
     pub fn lock<'a>(&self) -> MemoryPtrGuard<T> {

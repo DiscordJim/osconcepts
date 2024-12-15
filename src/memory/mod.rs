@@ -2,6 +2,7 @@ use std::{cell::UnsafeCell, sync::Arc};
 
 pub mod pool;
 pub mod numa;
+pub mod ipc;
 
 
 
