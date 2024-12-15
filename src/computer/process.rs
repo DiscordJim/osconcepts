@@ -1,15 +1,32 @@
+use rand::{random, thread_rng};
+
 
 #[derive(Debug)]
-pub struct Process {
-    id: u32
+pub struct Process
+{
+    id: u32,
+    pub code: OpCode
 }
 
-impl Process {
-    pub fn new(id: u32) -> Self {
+#[derive(Debug, PartialEq)]
+pub enum OpCode {
+    Shutdown,
+    Inert
+}
+
+impl Process
+{
+    pub fn basic(id: u32) -> Self {
         Self {
-            id
+            id,
+            code: OpCode::Inert
+        }
+    }
+    pub fn shutdown() -> Self {
+        Self {
+            id: random(),
+            code: OpCode::Shutdown
         }
     }
 }
 
-impl Process {}

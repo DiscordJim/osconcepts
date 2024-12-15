@@ -1,10 +1,13 @@
 //! Asymmetric Multi-processing
+//! 
+//! The kernel is on one CPU and the rest of the cores
+//! are just slaves. The user thread communicates with the
+//! master who schedule on other cores.
 
 
-use std::{collections::VecDeque, sync::Arc, thread, time::Duration};
+use std::{sync::Arc, thread, time::Duration};
 
-use osconcepts::{computer::{process::Process, processor::Cpu}, memory::{ipc::IpcChannel, pool::{MemoryMutex, RandomAccessMemory, SyncMemoryPtr}}};
-use parking_lot::{Condvar, Mutex};
+use osconcepts::{computer::{process::{OpCode, Process}, processor::Cpu}, memory::{ipc::IpcChannel, pool::{MemoryMutex, RandomAccessMemory, SyncMemoryPtr}}};
 
 
 
@@ -12,14 +15,12 @@ use parking_lot::{Condvar, Mutex};
 
 #[derive(Clone)]
 pub struct CommonData {
-    name: String,
-    tasks: Arc<IpcChannel<String>>
+    tasks: Arc<IpcChannel<Process>>
 }
 
 
 pub struct MasterData {
-    tasks: Arc<IpcChannel<String>>,
-    common: SyncMemoryPtr<CommonData>
+    tasks: Arc<IpcChannel<Process>>
 }
 
 
@@ -35,8 +36,17 @@ pub fn main_kernel(master: SyncMemoryPtr<MasterData>, common: SyncMemoryPtr<Comm
     let channel = master.lock().get().tasks.clone();
     loop {
         let msg = channel.recv();
-        println!("Received a message, {}", msg);
-        common.lock().get().tasks.send(msg);
+        println!("Master received process: {:?}", msg);
+        if msg.code == OpCode::Shutdown {
+            println!("Master received notice to shutdown, shutting down the slave cores.");
+            for _ in 0..4 {
+                common.lock().get().tasks.send(Process::shutdown());
+            }
+            break;
+        } else {
+            common.lock().get().tasks.send(msg);
+        }
+        
     
     }
 
@@ -50,35 +60,32 @@ pub fn slave_processor(data: CpuData) {
 
     loop {
         let msg = channel.recv();
-        println!("Process ({}) received work: {}", data.id, msg);
-        thread::sleep(Duration::from_secs(2));
+        println!("Process ({}) received work: {:?}", data.id, msg);
+
+        if msg.code == OpCode::Shutdown {
+            println!("Process ({}) received word to shut down.", data.id);
+            break;
+        } else {
+            thread::sleep(Duration::from_secs(2));
+        }
+        
     }
 
 }
 
-// pub fn cpu_function(data: CpuData) {
-//     match data.identify {
-//         Identity::Master => main_kernel(data),
-//         Identity::Slave => slave_processor(data),
-//     }
-//     // for _ in 0..50 {
-//     //     let buffer = if data.id == 0 {
-//     //         random_string::generate(6, "ABCabc")
-//     //     } else {
-//     //         random_string::generate(6, "DEFdef")
-//     //     };
-//     //     *data.part.lock().get_mut() = buffer;
-//     // }
-// }
+
 
 pub fn user_thread(master: SyncMemoryPtr<MasterData>) {
     println!("launched the user thread");
-    master.lock().get().tasks.send("Goodmorning masta!".to_string());
-    master.lock().get().tasks.send("good afternoon masta!".to_string());
-    master.lock().get().tasks.send("goodnight masta!".to_string());
-    master.lock().get().tasks.send("Goodmorning masta! 2".to_string());
-    master.lock().get().tasks.send("good afternoon masta! 2".to_string());
-    master.lock().get().tasks.send("goodnight masta! 2".to_string());
+    master.lock().get().tasks.send(Process::basic(0));
+    master.lock().get().tasks.send(Process::basic(1));
+    master.lock().get().tasks.send(Process::basic(2));
+    master.lock().get().tasks.send(Process::basic(3));
+    master.lock().get().tasks.send(Process::basic(4));
+
+    // Shut down the master.
+    master.lock().get().tasks.send(Process::shutdown());
+
 }
 
 
@@ -88,18 +95,18 @@ pub fn main() {
     // in this case our shared memory is a string.
 
 
+    // Common Shared Memory
     let shared_string = central_ram.store(CommonData {
-        name: "Super Cool Computa".to_string(),
         tasks: Arc::new(IpcChannel::new())
     });
 
+    // Master Memory
     let master_memory = central_ram.store(MasterData {
         tasks: IpcChannel::new().into(),
-        common: shared_string.clone()
     });
 
 
-    // spawn all the slavs
+    // Spawn the slave processors.
     let slaves = vec![
         Cpu::new(CpuData {
             id: 1,
