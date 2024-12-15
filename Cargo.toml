@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+parking_lot = { version = "0.12.3", features = ["arc_lock"] }
 rand = "0.8.5"
 random-string = "1.1.0"

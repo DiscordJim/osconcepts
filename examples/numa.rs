@@ -1,11 +1,11 @@
-use osconcepts::{computer::processor::Cpu, memory::pool::{MemoryPtr, RandomAccessMemory}};
+use osconcepts::{computer::processor::Cpu, memory::pool::{MemoryMutex, MemoryProtection, MemoryPtr, RandomAccessMemory, SyncMemoryPtr}};
 
 /// Non-Uniform Memory Access
 
 #[derive(Debug)]
 pub struct CpuData {
     id: u8,
-    part: MemoryPtr<String>
+    part: SyncMemoryPtr<String>
 }
 
 
@@ -16,14 +16,15 @@ pub fn cpu_function(mut data: CpuData) {
         } else {
             random_string::generate(6, "DEFdef")
         };
-        *data.part = buffer;
+        *data.part.lock().get_mut() = buffer;
+
     }
     
 }
 
 pub fn main() {
     // each processor shares the same memory.
-    let central_ram = RandomAccessMemory::new();
+    let central_ram = RandomAccessMemory::<MemoryMutex>::new();
     // in this case our shared memory is a string.
     let shared_string = central_ram.store("hello".to_string());
 

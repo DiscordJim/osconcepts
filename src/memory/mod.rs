@@ -1,4 +1,4 @@
-use std::{cell::UnsafeCell, ops::{Deref, DerefMut}, sync::Arc};
+use std::{cell::UnsafeCell, sync::Arc};
 
 pub mod pool;
 
