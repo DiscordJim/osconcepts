@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData, mem, ops::{Deref, DerefMut}, sync::{Arc, Weak}};
+use std::{collections::HashMap, fmt::Debug, marker::PhantomData, mem, ops::{Deref, DerefMut}, sync::{Arc, Weak}};
 
 use super::SharedMemory;
 
@@ -47,6 +47,15 @@ pub struct MemoryPtr<T> {
     ram: Weak<RamMap>,
     _type: PhantomData<T>
 }
+
+impl<T: Debug> Debug for MemoryPtr<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+unsafe impl<T> Send for MemoryPtr<T> {}
+unsafe impl<T> Sync for MemoryPtr<T> {}
 
 impl<T> Clone for MemoryPtr<T> {
     fn clone(&self) -> Self {

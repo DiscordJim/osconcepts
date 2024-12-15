@@ -1,6 +1,6 @@
 use osconcepts::{computer::processor::Cpu, memory::pool::{MemoryPtr, RandomAccessMemory}};
 
-/// Non-Uniform Memory Access
+/// Uniform Memory Access
 
 #[derive(Debug)]
 pub struct CpuData {
