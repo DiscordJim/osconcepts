@@ -6,6 +6,10 @@
 //! 
 //! To keep it simple when the time quantum is elapsed it is 
 //! just put back into the master quuee.
+//! 
+//! This also handles affinities. Affinities here are modeled
+//! very simply, the affinity just specifies which processor
+//! the process should be bound to.
 
 
 use std::{sync::Arc, thread, time::Duration};
@@ -68,7 +72,16 @@ pub fn slave_processor(data: CpuData) {
     let mut clock = QUANTA;
     loop {
         let mut msg = slave_work_queue.recv();
-        println!("Processor ({}) received work: {:?}", data.id, msg);
+        // If the process has a specific affinity,
+        // we check this and release it back to the queue if the
+        // affinity does not match.
+        if msg.affinity != -1 && msg.affinity != data.id.into() {
+            master_work_queue.send(msg);
+            continue;
+        }
+
+        
+        println!("Processor ({}) received process {}.", data.id, msg.id);
 
         if msg.code == OpCode::Shutdown && msg.time_units == 0 {
             println!("Processor ({}) received word to shut down.", data.id);
@@ -76,11 +89,12 @@ pub fn slave_processor(data: CpuData) {
         } else {
             // Tick the time quantum.
             while msg.time_units > 0 && clock > 0 {
+                // run the thread for some time.
                 thread::sleep(TIME_UNIT_DURATION);
                 msg.time_units -= 1;
                 clock -= 1;
             }
-            println!("Processor ({}) elapsed the time quantum for the process {:?}.", data.id, msg);
+            println!("Processor ({}) releasing process {}.", data.id, msg.id);
             clock = QUANTA;
 
             // Reschedule it back into the primary queue.
@@ -102,18 +116,16 @@ pub fn user_thread(master: SyncMemoryPtr<CommonData>) {
     println!("launched the user thread");
 
     // We will first launch three processes.
-    master.lock().get().slave_queue.send(Process::new(10));
-    master.lock().get().slave_queue.send(Process::new(15));
-    master.lock().get().slave_queue.send(Process::new(5));
+    master.lock().get().slave_queue.send(Process::full(0, 35, OpCode::Inert));
+    master.lock().get().slave_queue.send(Process::full(1, 25, OpCode::Inert));
+    master.lock().get().slave_queue.send(Process::full(2, 5, OpCode::Inert));
 
+    // We then launch a shutdown process, this will shutdown the computer upon completion. We do this with an affinity
+    // to only one of the processors.
+    //
+    // The affinity specifically is to processor 2.
+    master.lock().get().slave_queue.send(Process::full(3,125, OpCode::Shutdown).with_affinity(2));
 
-    // We then wait for a certain amount of time.
-    std::thread::sleep(Duration::from_secs(2));
-    println!("User is shutting down the processor.");
-
-
-    // Now we will send a timed shutdown signal. 
-    master.lock().get().slave_queue.send(Process::full(10, OpCode::Shutdown));
 
 }
 
