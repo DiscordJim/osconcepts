@@ -77,11 +77,11 @@ pub fn slave_processor(data: CpuData) {
 
 pub fn user_thread(master: SyncMemoryPtr<MasterData>) {
     println!("launched the user thread");
-    master.lock().get().tasks.send(Process::basic(0));
-    master.lock().get().tasks.send(Process::basic(1));
-    master.lock().get().tasks.send(Process::basic(2));
-    master.lock().get().tasks.send(Process::basic(3));
-    master.lock().get().tasks.send(Process::basic(4));
+    master.lock().get().tasks.send(Process::dummy(0));
+    master.lock().get().tasks.send(Process::dummy(1));
+    master.lock().get().tasks.send(Process::dummy(2));
+    master.lock().get().tasks.send(Process::dummy(3));
+    master.lock().get().tasks.send(Process::dummy(4));
 
     // Shut down the master.
     master.lock().get().tasks.send(Process::shutdown());
