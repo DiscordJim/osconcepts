@@ -7,14 +7,16 @@
 //! To keep it simple when the time quantum is elapsed it is 
 //! just put back into the master quuee.
 //! 
-//! This also handles affinities. Affinities here are modeled
-//! very simply, the affinity just specifies which processor
+//! This also handles affinities. Affinities here are modeled very simply, the affinity just specifies which processor
 //! the process should be bound to.
+//! 
+//! To make the example even more thorough, we incorporate [NumaPtr] so that
+//! memory access is non-uniform, like a real CPU.
 
 
 use std::{sync::Arc, thread, time::Duration};
 
-use osconcepts::{computer::{process::{OpCode, Process}, processor::Cpu}, memory::{ipc::IpcChannel, pool::{MemoryMutex, RandomAccessMemory, SyncMemoryPtr}}};
+use osconcepts::{computer::{process::{OpCode, Process}, processor::Cpu}, memory::{ipc::IpcChannel, numa::NumaPtr, pool::{MemoryMutex, RandomAccessMemory}}};
 
 const TIME_UNIT_DURATION: Duration = Duration::from_millis(50);
 
@@ -34,12 +36,12 @@ pub struct CommonData {
 /// The data for the processor.
 pub struct CpuData {
     id: u8,
-    part: SyncMemoryPtr<CommonData>
+    part: NumaPtr<CommonData>
 }
 
 
 /// Main kernel processor thread.
-pub fn main_kernel(common: SyncMemoryPtr<CommonData>) {
+pub fn main_kernel(common: NumaPtr<CommonData>) {
     println!("main launched");
     let channel = common.lock().get().master_queue.clone();
     loop {
@@ -112,7 +114,7 @@ pub fn slave_processor(data: CpuData) {
 
 
 
-pub fn user_thread(master: SyncMemoryPtr<CommonData>) {
+pub fn user_thread(master: NumaPtr<CommonData>) {
     println!("launched the user thread");
 
     // We will first launch three processes.
@@ -137,10 +139,10 @@ pub fn main() {
 
 
     // Common Shared Memory
-    let shared_string = central_ram.store(CommonData {
+    let shared_string = NumaPtr::upgrade(central_ram.store(CommonData {
         master_queue: Arc::new(IpcChannel::new()),
         slave_queue: Arc::new(IpcChannel::new())
-    });
+    }));
 
 
 
