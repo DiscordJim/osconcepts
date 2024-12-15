@@ -1,6 +1,8 @@
-use osconcepts::{computer::processor::Cpu, memory::pool::{MemoryMutex, RandomAccessMemory, SyncMemoryPtr}};
+//! Uniform Memory Access
+//! 
+//! Nothing too fancy needed here.
 
-/// Uniform Memory Access
+use osconcepts::{computer::processor::Cpu, memory::pool::{MemoryMutex, RandomAccessMemory, SyncMemoryPtr}};
 
 
 pub struct CpuData {

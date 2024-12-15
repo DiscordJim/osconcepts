@@ -1,6 +1,9 @@
 use std::{cell::UnsafeCell, sync::Arc};
 
 pub mod pool;
+pub mod numa;
+
+
 
 /// For unsafe unguarded memory sharing between threads.
 pub struct SharedMemory<T>(Arc<UnsafeCell<T>>);
