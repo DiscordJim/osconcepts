@@ -1,5 +1,8 @@
+use crate::memory::ipc::Yield;
+
 
 pub mod hard_drive;
+pub mod raid;
 
 pub type Bit = bool;
 
@@ -16,6 +19,12 @@ impl RawStoragePtr {
             bit_offset: (bit_pos % 8).try_into().unwrap()
         }
     }
+    pub fn byte_ptr(byte_offset: usize) -> Self {
+        Self {
+            byte_offset,
+            bit_offset: 0
+        }
+    }
 }
 
 pub trait StorageDevice {
@@ -26,6 +35,13 @@ pub trait StorageDevice {
     fn read(&self, addr: RawStoragePtr, length: usize) -> Vec<u8>;
 }
 
+pub trait AbstractStorageDevice {
+    fn write_bit(&self, addr: RawStoragePtr, bit: Bit) -> Yield<()>;
+    fn read_bit(&self, addr: RawStoragePtr) -> Yield<Bit>;
+    fn store(&self, data: &[u8]) -> Yield<RawStoragePtr>;
+    fn write(&self, addr: RawStoragePtr, data: &[u8]) -> Yield<()>;
+    fn read(&self, addr: RawStoragePtr, length: usize) -> Yield<Vec<u8>>;
+}
 
 #[derive(Default)]
 pub struct SecondaryStorage {
@@ -39,6 +55,9 @@ impl SecondaryStorage {
             buffer: vec![0u8; size],
             offset: 0
         }
+    }
+    pub fn get_offset(&self) -> usize {
+        self.offset
     }
     
 }
