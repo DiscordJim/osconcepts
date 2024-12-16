@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::{process::Process, scheduler::{Feedback, ProcessRecord, Scheduler, SchedulerAlgorithm}};
+use super::{process::Process, scheduler::{ProcessRecord, Scheduler, SchedulerAlgorithm}};
 
 
 /// A simple multilevel feedback queue.
@@ -144,26 +144,34 @@ mod tests {
         // Form the multi-level feedback quuee.
         let mut queue = MultilevelQueue::new()
             .with_level(SchedulerAlgorithm::RoundRobin(2))
-            .with_level(SchedulerAlgorithm::RoundRobin(4));
+            .with_level(SchedulerAlgorithm::RoundRobin(4))
+            .with_level(SchedulerAlgorithm::FirstComeFirstServe);
 
         // Schedule a single process.
         queue.schedule(Process::full(0, 6, OpCode::Inert));
-        assert_eq!(queue.current_unchecked().id, 0);
-        queue.current_unchecked().tick();
-        queue.current_unchecked().tick();
+        let (level, proc) = queue.current_with_key().unwrap();
+        assert_eq!(proc.id, 0);
+        assert_eq!(level, 0);
+        queue.current_unchecked().tick_n(2);
 
         // Schedule another process. This should preempt the first one.
         queue.schedule(Process::full(1, 6, OpCode::Inert));
-        assert_eq!(queue.current_unchecked().id, 1);
-        queue.current_unchecked().tick();
-        queue.current_unchecked().tick();
+        let (level, proc) = queue.current_with_key().unwrap();
+        assert_eq!(proc.id, 1);
+        assert_eq!(level, 0);
+        queue.current_unchecked().tick_n(2);
 
         // Now control should be handed back to the first process.
-        assert_eq!(queue.current_unchecked().id, 0);
+        let (level, proc) = queue.current_with_key().unwrap();
+        assert_eq!(proc.id, 0);
+        assert_eq!(level, 1);
+        
         queue.current_unchecked().tick_n(4);
 
         // First is done, should be the second.
-        assert_eq!(queue.current_unchecked().id, 1);
+        let (level, proc) = queue.current_with_key().unwrap();
+        assert_eq!(proc.id, 1);
+        assert_eq!(level, 1);
         queue.current_unchecked().tick_n(4);
 
         // We should be done.
