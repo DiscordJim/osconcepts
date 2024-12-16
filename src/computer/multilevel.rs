@@ -5,7 +5,19 @@ use super::{process::Process, scheduler::{ProcessRecord, Scheduler, SchedulerAlg
 
 /// A simple multilevel feedback queue.
 /// 
-/// This queue works by
+/// This queue works by having multiple levels
+/// and taking the current scheduled task from the highest
+/// available queue. This is quite efficient and is a simple
+/// way to implement it.
+/// 
+/// ```
+/// use osconcepts::computer::multilevel::MultilevelQueue;
+/// use osconcepts::computer::scheduler::SchedulerAlgorithm;
+/// 
+/// let mut queue = MultilevelQueue::new()
+///     .with_level(SchedulerAlgorithm::RoundRobin(2))
+///     .with_level(SchedulerAlgorithm::RoundRobin(4));
+/// ```
 #[derive(Default)]
 pub struct MultilevelQueue {
     levels: VecDeque<Scheduler>

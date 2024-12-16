@@ -1,36 +1,46 @@
 //! Implementation of a basic CPU scheduler.
 
-use std::{collections::{HashMap, LinkedList, VecDeque}, ops::{Deref, DerefMut}, time::SystemTime};
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::{Deref, DerefMut},
+};
 
 use super::process::Process;
-
 
 const INITIAL_TAU: f32 = 10.0;
 
 #[derive(Debug, PartialEq)]
 pub enum SchedulerAlgorithm {
+    /// First come first serve algorithm.
     FirstComeFirstServe,
+    /// Non-preemptive priority scheduling algorithm.
     Priority,
+    /// Preemptive priority scheduling algorithm,
+    /// if a process comes in with higher priority it
+    /// will knock off the currently scheduled one.
     PreemptivePriority,
+    /// Round robin scheduling algorithm, each
+    /// process runs for a certain time quantum.
     RoundRobin(usize),
-
     /// This is a preemptive scheduling algorithm
     /// that schedules the shortest job next.
-    ShortestRemainingTime(f32)
+    ShortestRemainingTime(f32),
 }
 
 #[derive(Debug)]
 pub struct ProcessRecord {
-    insertion_time: u128,
-    schedule_time: i128,
+    /// The time the process was scheduled.
+    schedule_time: u128,
+
+    /// This is the lifetime of the process
+    /// under round robin.
     lifetime: i32,
 
     /// Estimated remaining time, this is for SRT.
     estimated_remaining_time: f32,
 
-  
-
-    proc: Process
+    /// The actual process.
+    proc: Process,
 }
 
 impl ProcessRecord {
@@ -64,15 +74,26 @@ impl DerefMut for ProcessRecord {
 }
 
 pub struct Scheduler {
+    /// The currently scheduled process.
     scheduled: Option<ProcessRecord>,
+
+    /// The queue of currently scheduled
+    /// processes.
     queue: VecDeque<ProcessRecord>,
+
+    /// The scheduling algorithm to be
+    /// used.
     policy: SchedulerAlgorithm,
+
+    /// This is the insertion clock, it gets
+    /// incremmented every time we add something
+    /// to the queue.
     clock: u128,
 
     /// For the shortest time remaining algorithm,
     /// will be intialized to an initial value and updated
     /// upon getting more information during runs.
-    srt_time_table: HashMap<u32, f32>
+    srt_time_table: HashMap<u32, f32>,
 }
 
 impl Scheduler {
@@ -87,11 +108,10 @@ impl Scheduler {
     }
     pub fn schedule(&mut self, process: Process) {
         self.schedule_inner(ProcessRecord {
-            insertion_time: self.clock,
-            schedule_time: -1,
+            schedule_time: self.clock,
             lifetime: 0,
             estimated_remaining_time: INITIAL_TAU,
-            proc: process
+            proc: process,
         });
     }
 
@@ -101,21 +121,21 @@ impl Scheduler {
             self.srt_time_table.insert(record.id, INITIAL_TAU);
         }
 
-        record.schedule_time = -1;
-        record.insertion_time = self.clock;
-        
+        record.schedule_time = self.clock;
+
         if self.scheduled.is_none() {
             self.set_scheduled_record(record);
         } else if self.policy == SchedulerAlgorithm::PreemptivePriority
             && self.scheduled.is_some()
-            && record.proc.priority < self.scheduled.as_ref().unwrap().proc.priority {
+            && record.proc.priority < self.scheduled.as_ref().unwrap().proc.priority
+        {
             self.queue.push_back(self.scheduled.take().unwrap());
             self.set_scheduled_record(record);
         } else if matches!(self.policy, SchedulerAlgorithm::ShortestRemainingTime(_))
             && self.scheduled.is_some()
             // Check if the incoming process has a shorter time than the current.
             && self.scheduled.as_ref().unwrap().estimated_remaining_time > *self.srt_time_table.get(&record.id).unwrap()
-         {
+        {
             self.queue.push_back(self.scheduled.take().unwrap());
             self.set_scheduled_record(record);
         } else {
@@ -126,17 +146,14 @@ impl Scheduler {
     fn set_scheduled(&mut self, record: Option<ProcessRecord>) {
         match record {
             Some(record) => self.set_scheduled_record(record),
-            None => self.scheduled = None
+            None => self.scheduled = None,
         }
     }
     fn set_scheduled_record(&mut self, mut record: ProcessRecord) {
-        
-
         // Set the estimated remaining time. This is for shortest time remaining.
         record.estimated_remaining_time = *self.srt_time_table.get(&record.id).unwrap();
         println!("Record: {:#?}", record);
 
-        record.schedule_time = self.clock.try_into().unwrap();
         if let SchedulerAlgorithm::RoundRobin(quantum) = self.policy {
             record.lifetime = quantum.try_into().unwrap();
         }
@@ -147,20 +164,24 @@ impl Scheduler {
     }
     pub fn current(&mut self) -> Option<&mut ProcessRecord> {
         if self.scheduled.is_some() {
-        
             if self.scheduled.as_ref().unwrap().proc.time_units == 0 {
                 let next = self.next();
-                
+
                 // Update the shortest time remaining table.
                 if let SchedulerAlgorithm::ShortestRemainingTime(alpha) = self.policy {
                     // Update the prediction.
-                    let tau = self.srt_time_table.get_mut(&self.scheduled.as_ref().unwrap().id).unwrap();
-                    *tau = (alpha * (self.scheduled.as_ref().unwrap().static_time_units as f32)) + ((1.0 - alpha) * (*tau));
+                    let tau = self
+                        .srt_time_table
+                        .get_mut(&self.scheduled.as_ref().unwrap().id)
+                        .unwrap();
+                    *tau = (alpha * (self.scheduled.as_ref().unwrap().static_time_units as f32))
+                        + ((1.0 - alpha) * (*tau));
                 }
-                
 
                 self.set_scheduled(next);
-            } else if matches!(self.policy, SchedulerAlgorithm::RoundRobin(_)) && self.scheduled.as_ref().unwrap().lifetime <= 0 {
+            } else if matches!(self.policy, SchedulerAlgorithm::RoundRobin(_))
+                && self.scheduled.as_ref().unwrap().lifetime <= 0
+            {
                 // We are using round robin and the time quantum has expired.
                 let current = self.scheduled.take().unwrap();
                 let next = self.next();
@@ -173,17 +194,28 @@ impl Scheduler {
     fn next(&mut self) -> Option<ProcessRecord> {
         match self.policy {
             SchedulerAlgorithm::FirstComeFirstServe | SchedulerAlgorithm::RoundRobin(_) => {
-                let (index, _) = self.queue.iter_mut().enumerate().min_by_key(|(_, f)| f.insertion_time)?;
+                let (index, _) = self
+                    .queue
+                    .iter_mut()
+                    .enumerate()
+                    .min_by_key(|(_, f)| f.schedule_time)?;
                 self.queue.remove(index)
-            },
+            }
             SchedulerAlgorithm::Priority | SchedulerAlgorithm::PreemptivePriority => {
-                let (index, _) = self.queue.iter_mut().enumerate().min_by_key(|(_, f)| f.proc.priority)?;
+                let (index, _) = self
+                    .queue
+                    .iter_mut()
+                    .enumerate()
+                    .min_by_key(|(_, f)| f.proc.priority)?;
                 self.queue.remove(index)
-            },
+            }
             SchedulerAlgorithm::ShortestRemainingTime(_) => {
                 // Note: tau is our estimated time remaining.
                 // Therefore, we grab the process with the lowest remaining time.
-                let (index, _) = self.queue.iter_mut().enumerate().min_by(|(_, a), (_, b)| a.estimated_remaining_time.total_cmp(&b.estimated_remaining_time))?;
+                let (index, _) = self.queue.iter_mut().enumerate().min_by(|(_, a), (_, b)| {
+                    a.estimated_remaining_time
+                        .total_cmp(&b.estimated_remaining_time)
+                })?;
                 self.queue.remove(index)
             }
         }
@@ -193,11 +225,9 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
 
-
     use crate::computer::process::{OpCode, Process};
 
     use super::{Scheduler, SchedulerAlgorithm};
-
 
     #[test]
     pub fn scheduler_fcfs() {
@@ -244,7 +274,6 @@ mod tests {
         assert_eq!(scheduler.current_unchecked().proc.id, 4);
         scheduler.current_unchecked().proc.time_units = 0;
         assert_eq!(scheduler.current_unchecked().proc.id, 1);
-  
 
         scheduler.schedule(Process::full(5, 1, OpCode::Inert).with_prioirty(-50));
         assert_eq!(scheduler.current_unchecked().proc.id, 5);
@@ -255,10 +284,6 @@ mod tests {
 
         assert_eq!(scheduler.current_unchecked().proc.id, 2);
         scheduler.current_unchecked().proc.time_units = 0;
-
-        
-
-
     }
 
     #[test]
@@ -268,7 +293,7 @@ mod tests {
 
         // tick it to the end
         scheduler.current_unchecked().tick_n(3);
-        
+
         // current should be one
         scheduler.schedule(Process::full(1, 3, OpCode::Inert));
         assert_eq!(scheduler.current_unchecked().id, 1);
@@ -276,8 +301,6 @@ mod tests {
         // this should preempt one.
         scheduler.schedule(Process::full(0, 3, OpCode::Inert));
         assert_eq!(scheduler.current_unchecked().id, 0);
-
-   
     }
 
     #[test]
@@ -318,17 +341,13 @@ mod tests {
         scheduler.current_unchecked().tick();
         scheduler.current_unchecked().tick();
 
-
         // We should be back to process 0
         assert_eq!(scheduler.current_unchecked().id, 0);
         scheduler.current_unchecked().tick();
         scheduler.current_unchecked().tick();
         scheduler.current_unchecked().tick();
 
-       
         // we are done
         assert!(scheduler.current().is_none());
-       
-
     }
 }
