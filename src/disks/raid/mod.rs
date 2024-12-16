@@ -1,3 +1,3 @@
-use super::hard_drive::MagneticDisk;
-
 pub mod raid0;
+pub mod raid1;
+pub mod raid3;

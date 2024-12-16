@@ -3,6 +3,7 @@ use crate::memory::ipc::Yield;
 
 pub mod hard_drive;
 pub mod raid;
+pub mod bits;
 
 pub type Bit = bool;
 
