@@ -1,6 +1,6 @@
 //! Implementation of a basic CPU scheduler.
 
-use std::{collections::{LinkedList, VecDeque}, ops::{Deref, DerefMut}, time::SystemTime};
+use std::{collections::{HashMap, LinkedList, VecDeque}, ops::{Deref, DerefMut}, time::SystemTime};
 
 use super::process::Process;
 
@@ -9,18 +9,27 @@ const INITIAL_TAU: f32 = 10.0;
 
 #[derive(Debug, PartialEq)]
 pub enum SchedulerAlgorithm {
-    FCFS,
+    FirstComeFirstServe,
     Priority,
     PreemptivePriority,
-    RoundRobin(usize)
+    RoundRobin(usize),
+
+    /// This is a preemptive scheduling algorithm
+    /// that schedules the shortest job next.
+    ShortestRemainingTime(f32)
 }
 
+#[derive(Debug)]
 pub struct ProcessRecord {
     insertion_time: u128,
     schedule_time: i128,
     lifetime: i32,
-    /// This is the calculated estimated length.
-    tau: f32,
+
+    /// Estimated remaining time, this is for SRT.
+    estimated_remaining_time: f32,
+
+  
+
     proc: Process
 }
 
@@ -32,6 +41,7 @@ impl ProcessRecord {
         if self.proc.time_units > 0 {
             self.proc.time_units -= 1;
         }
+        self.estimated_remaining_time -= 1.0;
     }
     pub fn tick_n(&mut self, n: usize) {
         for _ in 0..n {
@@ -57,7 +67,12 @@ pub struct Scheduler {
     scheduled: Option<ProcessRecord>,
     queue: VecDeque<ProcessRecord>,
     policy: SchedulerAlgorithm,
-    clock: u128
+    clock: u128,
+
+    /// For the shortest time remaining algorithm,
+    /// will be intialized to an initial value and updated
+    /// upon getting more information during runs.
+    srt_time_table: HashMap<u32, f32>
 }
 
 impl Scheduler {
@@ -66,6 +81,7 @@ impl Scheduler {
             policy,
             scheduled: None,
             queue: VecDeque::default(),
+            srt_time_table: HashMap::new(),
             clock: 0,
         }
     }
@@ -74,7 +90,7 @@ impl Scheduler {
             insertion_time: self.clock,
             schedule_time: -1,
             lifetime: 0,
-            tau: INITIAL_TAU,
+            estimated_remaining_time: INITIAL_TAU,
             proc: process
         });
     }
@@ -84,6 +100,7 @@ impl Scheduler {
 
         record.schedule_time = -1;
         record.insertion_time = self.clock;
+        
         if self.scheduled.is_none() {
             self.set_scheduled_record(record);
         } else if self.policy == SchedulerAlgorithm::PreemptivePriority
@@ -103,6 +120,15 @@ impl Scheduler {
         }
     }
     fn set_scheduled_record(&mut self, mut record: ProcessRecord) {
+        if !self.srt_time_table.contains_key(&record.id) {
+            // If this is not in the table, store the default value.
+            self.srt_time_table.insert(record.id, INITIAL_TAU);
+        }
+
+        // Set the estimated remaining time. This is for shortest time remaining.
+        record.estimated_remaining_time = *self.srt_time_table.get(&record.id).unwrap();
+        println!("Record: {:#?}", record);
+
         record.schedule_time = self.clock.try_into().unwrap();
         if let SchedulerAlgorithm::RoundRobin(quantum) = self.policy {
             record.lifetime = quantum.try_into().unwrap();
@@ -117,10 +143,17 @@ impl Scheduler {
         
             if self.scheduled.as_ref().unwrap().proc.time_units == 0 {
                 let next = self.next();
+                
+                // Update the shortest time remaining table.
+                if let SchedulerAlgorithm::ShortestRemainingTime(alpha) = self.policy {
+                    // Update the prediction.
+                    let tau = self.srt_time_table.get_mut(&self.scheduled.as_ref().unwrap().id).unwrap();
+                    *tau = (alpha * (self.scheduled.as_ref().unwrap().static_time_units as f32)) + ((1.0 - alpha) * (*tau));
+                }
+                
+
                 self.set_scheduled(next);
-            
             } else if matches!(self.policy, SchedulerAlgorithm::RoundRobin(_)) && self.scheduled.as_ref().unwrap().lifetime <= 0 {
-                println!("This matches?");
                 // We are using round robin and the time quantum has expired.
                 let current = self.scheduled.take().unwrap();
                 let next = self.next();
@@ -132,12 +165,18 @@ impl Scheduler {
     }
     fn next(&mut self) -> Option<ProcessRecord> {
         match self.policy {
-            SchedulerAlgorithm::FCFS | SchedulerAlgorithm::RoundRobin(_) => {
+            SchedulerAlgorithm::FirstComeFirstServe | SchedulerAlgorithm::RoundRobin(_) => {
                 let (index, _) = self.queue.iter_mut().enumerate().min_by_key(|(_, f)| f.insertion_time)?;
                 self.queue.remove(index)
             },
             SchedulerAlgorithm::Priority | SchedulerAlgorithm::PreemptivePriority => {
                 let (index, _) = self.queue.iter_mut().enumerate().min_by_key(|(_, f)| f.proc.priority)?;
+                self.queue.remove(index)
+            },
+            SchedulerAlgorithm::ShortestRemainingTime(_) => {
+                // Note: tau is our estimated time remaining.
+                // Therefore, we grab the process with the lowest remaining time.
+                let (index, _) = self.queue.iter_mut().enumerate().min_by(|(_, a), (_, b)| a.estimated_remaining_time.total_cmp(&b.estimated_remaining_time))?;
                 self.queue.remove(index)
             }
         }
@@ -146,6 +185,8 @@ impl Scheduler {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
+
     use crate::computer::process::{OpCode, Process};
 
     use super::{Scheduler, SchedulerAlgorithm};
@@ -153,7 +194,7 @@ mod tests {
 
     #[test]
     pub fn scheduler_fcfs() {
-        let mut scheduler = Scheduler::new(SchedulerAlgorithm::FCFS);
+        let mut scheduler = Scheduler::new(SchedulerAlgorithm::FirstComeFirstServe);
         scheduler.schedule(Process::full(0, 1, OpCode::Inert));
         scheduler.schedule(Process::full(1, 1, OpCode::Inert));
         scheduler.schedule(Process::full(4, 1, OpCode::Inert));
@@ -211,6 +252,42 @@ mod tests {
         
 
 
+    }
+
+    #[test]
+    pub fn scheduler_srt_preemption() {
+        let mut scheduler = Scheduler::new(SchedulerAlgorithm::ShortestRemainingTime(0.5));
+        scheduler.schedule(Process::full(0, 3, OpCode::Inert));
+
+        // tick it to the end
+        scheduler.current_unchecked().tick_n(3);
+
+        // we should have nothing i queue.
+        assert!(scheduler.current().is_none());
+
+        // reschedule a thread from process 0
+        scheduler.schedule(Process::full(0, 3, OpCode::Inert));
+
+        // make sure the calculation is correct.
+        assert!(scheduler.srt_time_table.get(&0).unwrap().eq(&6.5));
+    }
+
+    #[test]
+    pub fn scheduler_srt() {
+        let mut scheduler = Scheduler::new(SchedulerAlgorithm::ShortestRemainingTime(0.5));
+        scheduler.schedule(Process::full(0, 3, OpCode::Inert));
+
+        // tick it to the end
+        scheduler.current_unchecked().tick_n(3);
+
+        // we should have nothing i queue.
+        assert!(scheduler.current().is_none());
+
+        // reschedule a thread from process 0
+        scheduler.schedule(Process::full(0, 3, OpCode::Inert));
+
+        // make sure the calculation is correct.
+        assert!(scheduler.srt_time_table.get(&0).unwrap().eq(&6.5));
     }
 
     #[test]

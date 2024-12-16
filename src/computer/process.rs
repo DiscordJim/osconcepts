@@ -17,6 +17,9 @@ pub struct Process
     pub priority: i32,
     /// How long the process will take.
     pub time_units: usize,
+    /// Full time units
+    pub static_time_units: usize,
+
     pub code: OpCode,
     /// In actual operating systems this tends to be a mask
     pub affinity: i32
@@ -35,6 +38,7 @@ impl Process
             id,
             priority: 0,
             time_units: 0,
+            static_time_units: 0,
             code: OpCode::Inert,
             affinity: -1
         }
@@ -44,6 +48,7 @@ impl Process
             id: random(),
             priority: 0,
             time_units: time,
+            static_time_units: time,
             code: OpCode::Inert,
             affinity: -1
         }
@@ -52,6 +57,7 @@ impl Process
         Self {
             id,
             priority: 0,
+            static_time_units: time,
             time_units: time,
             code,
             affinity: -1
@@ -62,6 +68,7 @@ impl Process
             id: random(),
             priority: 0,
             time_units: 0,
+            static_time_units: 0,
             code: OpCode::Shutdown,
             affinity: -1
         }
