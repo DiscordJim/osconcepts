@@ -24,7 +24,7 @@ impl Raid1 {
     pub fn write(&self, data: &[u8]) -> RawStoragePtr {
         let ptr = RawStoragePtr::byte_ptr(self.offset.load(Ordering::SeqCst));
         for disk in &self.array {
-            disk.write(ptr, data);
+            disk.write(ptr, data).get();
         }
         self.offset.fetch_add(data.len(), Ordering::SeqCst);
         ptr

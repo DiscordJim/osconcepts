@@ -4,12 +4,12 @@ use crate::disks::{bits::BitVec, hard_drive::MagneticDisk, AbstractStorageDevice
 
 
 #[derive(Default)]
-pub struct Raid3Builder {
+pub struct Raid4Builder {
     array: Vec<MagneticDisk>,
     parity: Option<MagneticDisk>
 }
 
-impl Raid3Builder {
+impl Raid4Builder {
     pub fn with_disk(mut self, disk: MagneticDisk) -> Self {
         self.array.push(disk);
         self
@@ -18,8 +18,8 @@ impl Raid3Builder {
         self.parity = Some(disk);
         self
     }
-    pub fn build(self) -> Raid3 {
-        Raid3 {
+    pub fn build(self) -> Raid4 {
+        Raid4 {
             array: self.array.into_boxed_slice(),
             parity: self.parity.unwrap(),
             offset: AtomicUsize::new(0)
@@ -27,61 +27,41 @@ impl Raid3Builder {
     }
 }
 
-/// A RAID3 array. Mirroring.
-pub struct Raid3 {
+/// A RAID4 array. 
+/// 
+/// Byte-level (it should be block but this is a huge pain so we are doing it at
+/// the byte level) striping w/ a parity disk.
+pub struct Raid4 {
     array: Box<[MagneticDisk]>,
     parity: MagneticDisk,
     offset: AtomicUsize
 }
 
-impl Raid3 {
-    /// Writes to the RAID3 array, performing striping
-    /// at the byte level.
+impl Raid4 {
+    /// Writes to the RAID4 array, performing striping at the
+    /// byte level.
     /// 
     /// This will only perform byte level writes.
     pub fn write(&self, data: &[u8]) -> RawStoragePtr {
+        let ptr = RawStoragePtr::byte_ptr(self.offset.load(Ordering::SeqCst));
         let current_offset = self.offset.load(Ordering::SeqCst);
-        let ptr = RawStoragePtr::byte_ptr(current_offset);
-
         for i in 0..data.len() {
-            let byte = BitVec::from(data[i]);
-            for j in 0..8 {
-                let bit_index = (8 * (i + current_offset)) + j;
-
-                let disk = bit_index % self.array.len();
-                let bit_height = bit_index / self.array.len();
-
-                self.array[disk].write_bit(RawStoragePtr::bit_ptr(bit_height), byte[j]).get();
-            }
-
-            // Write the parity byte to the disk.
-            self.parity.write_bit(RawStoragePtr::bit_ptr(i + current_offset), byte.parity()).get();
+            let disk = (i + current_offset) % self.array.len();
+            self.array[disk].write(RawStoragePtr::byte_ptr((i + current_offset) / self.array.len()), &[data[i]]).get();
+            self.parity.write_bit(RawStoragePtr::bit_ptr(i + current_offset), BitVec::from(data[i]).parity()).get();
         }
         self.offset.fetch_add(data.len(), Ordering::SeqCst);
         ptr
     }
-    /// Reads from the RAID3 array. Only supports byte level reads.
+    /// Reads from the RAID4 array. Only supports byte level reads.
     pub fn read(&self, ptr: RawStoragePtr, length: usize) -> Vec<u8> {
-        let mut buffer = vec![0u8; length];
-        for bit_index in ptr.byte_offset * 8..((ptr.byte_offset + length) * 8) {
-         
-
-            // Get the index into the buffer.
-            let buffer_index = (bit_index - (8 * ptr.byte_offset)) / 8;
-            let buffer_stride = (bit_index - (8 * ptr.byte_offset)) % 8;
-            
-            // This calcuates what disk we have to look up from and the position of the bi.
-            let disk = bit_index % self.array.len();
-            let bit_height = bit_index / self.array.len();
-
-            // Updates the value in the buffer.
-            if self.array[disk].read_bit(RawStoragePtr::bit_ptr(bit_height)).get() {
-                buffer[buffer_index] |= 1 << (7 - buffer_stride);
-            }
+        let mut buffer = vec![];
+        for i in (ptr.byte_offset)..(ptr.byte_offset + length) {
+            buffer.push(self.array[i % self.array.len()].read(RawStoragePtr::byte_ptr(i / self.array.len()), 1).get()[0]);
         }
         buffer
     }
-    /// Checks the integrity of the RAID3 array.
+    /// Checks the integrity of the RAID4 array.
     pub fn check_array_integrity(&self) -> bool {
         let current_offset = self.offset.load(Ordering::SeqCst);
         for byte in 0..current_offset {
@@ -98,13 +78,13 @@ impl Raid3 {
 
 #[cfg(test)]
 mod tests {
-    use crate::disks::{hard_drive::{DiskAlgorithm, MagneticDisk}, raid::raid3::Raid3Builder, AbstractStorageDevice, RawStoragePtr};
+    use crate::disks::{hard_drive::{DiskAlgorithm, MagneticDisk}, raid::raid4::Raid4Builder, AbstractStorageDevice, RawStoragePtr};
 
 
 
     #[test]
-    pub fn test_raid3_array() {
-        let raid = Raid3Builder::default()
+    pub fn test_raid4_array() {
+        let raid = Raid4Builder::default()
             .with_disk(MagneticDisk::new(256, DiskAlgorithm::FCFS))
             .with_disk(MagneticDisk::new(256, DiskAlgorithm::FCFS))
             .with_disk(MagneticDisk::new(256, DiskAlgorithm::FCFS))
@@ -131,8 +111,8 @@ mod tests {
     }
 
     #[test]
-    pub fn test_raid3_array_corruption() {
-        let raid = Raid3Builder::default()
+    pub fn test_raid4_array_corruption() {
+        let raid = Raid4Builder::default()
             .with_disk(MagneticDisk::new(256, DiskAlgorithm::FCFS))
             .with_disk(MagneticDisk::new(256, DiskAlgorithm::FCFS))
             .with_disk(MagneticDisk::new(256, DiskAlgorithm::FCFS))

@@ -26,7 +26,7 @@ impl Raid0 {
         let current_offset = self.offset.load(Ordering::SeqCst);
         for i in 0..data.len() {
             let disk = (i + current_offset) % self.array.len();
-            self.array[disk].write(RawStoragePtr::byte_ptr((i + current_offset) / self.array.len()), &[data[i]]);
+            self.array[disk].write(RawStoragePtr::byte_ptr((i + current_offset) / self.array.len()), &[data[i]]).get();
         }
         self.offset.fetch_add(data.len(), Ordering::SeqCst);
         ptr
