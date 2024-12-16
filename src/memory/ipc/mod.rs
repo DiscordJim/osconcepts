@@ -16,11 +16,13 @@ impl<T> IpcChannel<T> {
             signal: Condvar::new(),
         }
     }
+    /// Sends a value into the IPC channel.
     pub fn send(&self, data: T) {
         let mut queue = self.queue.lock();
         queue.push_back(data);
         self.signal.notify_one();
     }
+    /// Receives unconditionally.
     pub fn recv(&self) -> T {
         let mut queue = self.queue.lock();
         if !queue.is_empty() {
