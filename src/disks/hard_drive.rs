@@ -1,9 +1,9 @@
 use std::{
     sync::{
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicU8, AtomicUsize, Ordering},
         Arc,
     },
-    thread::{current, yield_now, Thread},
+    thread::yield_now,
 };
 
 use parking_lot::Mutex;
@@ -52,15 +52,19 @@ pub enum ServiceRequest {
         addr: RawStoragePtr,
         data: Vec<u8>,
         confirm: Arc<IpcChannel<()>>,
-    },
+    }
 }
 
 pub struct MagneticDisk {
+    /// All the scheduled service rquests.
     requests: Arc<IpcChannel<ServiceRequest>>,
 
     /// Keeps track of all the requests serviced, mostly
     /// used for testing.
     service_record: Arc<Mutex<Vec<usize>>>,
+
+
+    offset: Arc<AtomicUsize>,
 
     /// The states are as follows,
     /// 0 = Paused
@@ -74,14 +78,16 @@ impl MagneticDisk {
         let object = Self {
             requests: Arc::new(IpcChannel::new()),
             state: Arc::new(AtomicU8::new(1)),
+            offset: Arc::new(AtomicUsize::new(0)),
             service_record: Arc::default(),
         };
         std::thread::spawn({
             let requests = Arc::clone(&object.requests);
             let state = Arc::clone(&object.state);
             let record = Arc::clone(&object.service_record);
+            let offset = Arc::clone(&object.offset);
             move || {
-                run_disk(requests, SecondaryStorage::new(size), state, record, algorithm);
+                run_disk(requests, SecondaryStorage::new(size), state, record, algorithm, offset);
             }
         });
         object
@@ -95,6 +101,11 @@ impl MagneticDisk {
     pub fn shutdown(&self) {
         self.state.store(2, Ordering::SeqCst);
     }
+    /// This is the sequential offset pointer, this is the pointer that is updated
+    /// when we perform store operations.
+    pub fn get_offset(&self) -> usize {
+        self.offset.load(Ordering::SeqCst)
+    }
 }
 
 fn run_disk(
@@ -102,7 +113,8 @@ fn run_disk(
     mut storage: SecondaryStorage,
     state: Arc<AtomicU8>,
     record: Arc<Mutex<Vec<usize>>>,
-    algorithm: DiskAlgorithm
+    algorithm: DiskAlgorithm,
+    disk_offset: Arc<AtomicUsize>
 ) {
     // let algorithm = DiskAlgorithm::SSTF;
 
@@ -141,7 +153,7 @@ fn run_disk(
                 .min_by_key(|(_, (_, time, _))| *time)
             {
                 let (offset, _, item) = service_queue.remove(index);
-                service_request(item, offset, &mut storage, &record, &mut head);
+                service_request(item, offset, &mut storage, &record, &mut head, &disk_offset);
             }
         } else if algorithm == DiskAlgorithm::SSTF && !service_queue.is_empty() {
             // We are using shortest seek time first and thus we will choose
@@ -152,7 +164,7 @@ fn run_disk(
                 .min_by_key(|(_, (offset, _, _))| offset.byte_offset.abs_diff(head))
             {
                 let (offset, _, item) = service_queue.remove(index);
-                service_request(item, offset, &mut storage, &record, &mut head);
+                service_request(item, offset, &mut storage, &record, &mut head, &disk_offset);
             }
         } else if (algorithm == DiskAlgorithm::SCAN || algorithm == DiskAlgorithm::CSCAN || algorithm == DiskAlgorithm::CLOOK) && !service_queue.is_empty() {
             // We are using SCAN or CSCAN and thus we just service if we are on that spot.
@@ -162,7 +174,7 @@ fn run_disk(
                 .find(|(_, (offset, _, _))| offset.byte_offset == head)
             {
                 let (offset, _, item) = service_queue.remove(index);
-                service_request(item, offset, &mut storage, &record, &mut head);
+                service_request(item, offset, &mut storage, &record, &mut head, &disk_offset);
             }
         }
 
@@ -172,7 +184,7 @@ fn run_disk(
 
             // If we are using CLOOK and there are no more requests in this direction jump o the beginning.
             if algorithm == DiskAlgorithm::CLOOK
-                && service_queue.iter().find(|(o, _, _)| o.byte_offset > head).is_some()
+                && service_queue.iter().find(|(o, _, _)| o.byte_offset >= head).is_none()
              {
                 head = 0;
             } else if head >= storage.buffer.len() {
@@ -193,9 +205,9 @@ fn service_request(
     offset: RawStoragePtr,
     storage: &mut SecondaryStorage,
     record: &Mutex<Vec<usize>>,
-    head: &mut usize
+    head: &mut usize,
+    offset_disk: &AtomicUsize
 ) {
-    println!("Servicing request at {}", offset.byte_offset);
     record.lock().push(offset.byte_offset);
     *head = offset.byte_offset;
     match item {
@@ -229,6 +241,7 @@ fn service_request(
             confirm.send(());
         }
     }
+    offset_disk.store(storage.get_offset(), Ordering::SeqCst);
 }
 
 impl AbstractStorageDevice for MagneticDisk {
@@ -286,23 +299,21 @@ impl AbstractStorageDevice for MagneticDisk {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{
-        disks::{hard_drive::DiskAlgorithm, AbstractStorageDevice, RawStoragePtr},
-        memory::ipc::Yield,
-    };
+    use crate::disks::{hard_drive::DiskAlgorithm, AbstractStorageDevice, RawStoragePtr};
 
     use super::MagneticDisk;
 
-    // #[test]
-    // pub fn test_magnetic_disk_simple() {
-    //     let magn = Arc::new(MagneticDisk::new(4096));
+    #[test]
+    pub fn test_magnetic_disk_simple() {
+        let magn = Arc::new(MagneticDisk::new(4096, DiskAlgorithm::FCFS));
 
-    //     let wow = magn.store(&[1,2,3]).get();
-    //     assert_eq!(magn.read(wow, 3).get(), [1,2,3]);
+        let wow = magn.store(&[1,2,3]).get();
+        assert_eq!(magn.get_offset(), 3);
+        assert_eq!(magn.read(wow, 3).get(), [1,2,3]);
 
-    //     magn.write(RawStoragePtr::byte_ptr(50), &[4,5,6]).get();
-    //     magn.write(RawStoragePtr::byte_ptr(25), &[4,5,6]).get();
-    // }
+        magn.write(RawStoragePtr::byte_ptr(50), &[4,5,6]).get();
+        magn.write(RawStoragePtr::byte_ptr(25), &[4,5,6]).get();
+    }
 
     #[test]
     pub fn test_magnetic_disk_servicing_fcfs() {
@@ -372,6 +383,26 @@ mod tests {
     #[test]
     pub fn test_magnetic_disk_servicing_cscan() {
         let magn = Arc::new(MagneticDisk::new(4096, DiskAlgorithm::CSCAN));
+        magn.pause();
+
+        let r1 = magn.store(&[1, 2, 3]);
+        let r2 = magn.store(&[4, 5, 6]);
+        let r3 = magn.write(RawStoragePtr::byte_ptr(96), &[7, 8]);
+        let r4 = magn.write(RawStoragePtr::byte_ptr(50), &[7, 8]);
+
+        magn.run();
+
+        r1.get();
+        r2.get();
+        r3.get();
+        r4.get();
+
+        assert_eq!(*magn.service_record.lock(), [0, 50, 96, 0]);
+    }
+
+    #[test]
+    pub fn test_magnetic_disk_servicing_clook() {
+        let magn = Arc::new(MagneticDisk::new(4096, DiskAlgorithm::CLOOK));
         magn.pause();
 
         let r1 = magn.store(&[1, 2, 3]);
