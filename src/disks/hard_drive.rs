@@ -297,7 +297,7 @@ impl AbstractStorageDevice for MagneticDisk {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, thread::sleep, time::Duration};
 
     use crate::disks::{hard_drive::DiskAlgorithm, AbstractStorageDevice, RawStoragePtr};
 
@@ -325,6 +325,7 @@ mod tests {
         let r3 = magn.write(RawStoragePtr::byte_ptr(96), &[7, 8]);
         let r4 = magn.write(RawStoragePtr::byte_ptr(50), &[7, 8]);
 
+        sleep(Duration::from_millis(50));
         magn.run();
 
         r1.get();
@@ -348,6 +349,7 @@ mod tests {
         let r5 = magn.write(RawStoragePtr::byte_ptr(45), &[7, 8]);
         let r6 = magn.write(RawStoragePtr::byte_ptr(51), &[7, 8]);
 
+        sleep(Duration::from_millis(50));
         magn.run();
 
         r1.get();
@@ -370,6 +372,7 @@ mod tests {
         let r3 = magn.write(RawStoragePtr::byte_ptr(96), &[7, 8]);
         let r4 = magn.write(RawStoragePtr::byte_ptr(50), &[7, 8]);
 
+        sleep(Duration::from_millis(50));
         magn.run();
 
         r1.get();
@@ -390,6 +393,7 @@ mod tests {
         let r3 = magn.write(RawStoragePtr::byte_ptr(96), &[7, 8]);
         let r4 = magn.write(RawStoragePtr::byte_ptr(50), &[7, 8]);
 
+        sleep(Duration::from_millis(50));
         magn.run();
 
         r1.get();
@@ -410,6 +414,7 @@ mod tests {
         let r3 = magn.write(RawStoragePtr::byte_ptr(96), &[7, 8]);
         let r4 = magn.write(RawStoragePtr::byte_ptr(50), &[7, 8]);
 
+        sleep(Duration::from_millis(50));
         magn.run();
 
         r1.get();

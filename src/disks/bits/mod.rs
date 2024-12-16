@@ -3,8 +3,20 @@ use std::{fmt::Debug, ops::Index, slice::SliceIndex};
 pub type Bit = bool;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BitVec([bool; 8]);
+
+impl BitVec {
+    pub fn parity(&self) -> Bit {
+        let mut ones = 0;
+        for i in 0..self.0.len() {
+            if self.0[i] {
+                ones += 1;
+            }
+        }
+        ones % 2 == 1
+    }
+}
 
 
 impl From<u8> for BitVec {
@@ -51,5 +63,11 @@ mod tests {
             let bv: u8 = bv.into();
             assert_eq!(bv, i);
         }
+    }
+
+    #[test]
+    pub fn simple_bitvec_parity() {
+        assert_eq!(BitVec::from(3 as u8).parity(), false);
+        assert_eq!(BitVec::from(1 as u8).parity(), true);
     }
 }
