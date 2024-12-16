@@ -1,7 +1,7 @@
 //! Implementation of a basic CPU scheduler.
 
 use std::{
-    collections::{HashMap, VecDeque}, marker::PhantomData, ops::{Deref, DerefMut}
+    collections::{HashMap, VecDeque}, ops::{Deref, DerefMut}
 };
 
 use super::process::Process;
@@ -286,7 +286,7 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
 
-    use crate::computer::{process::{OpCode, Process}, scheduler::Normal};
+    use crate::computer::process::{OpCode, Process};
 
     use super::{Scheduler, SchedulerAlgorithm};
 
