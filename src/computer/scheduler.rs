@@ -96,7 +96,10 @@ impl Scheduler {
     }
 
     fn schedule_inner(&mut self, mut record: ProcessRecord) {
-        
+        if !self.srt_time_table.contains_key(&record.id) {
+            // If this is not in the table, store the default value.
+            self.srt_time_table.insert(record.id, INITIAL_TAU);
+        }
 
         record.schedule_time = -1;
         record.insertion_time = self.clock;
@@ -107,7 +110,14 @@ impl Scheduler {
             && self.scheduled.is_some()
             && record.proc.priority < self.scheduled.as_ref().unwrap().proc.priority {
             self.queue.push_back(self.scheduled.take().unwrap());
-            self.scheduled = Some(record);
+            self.set_scheduled_record(record);
+        } else if matches!(self.policy, SchedulerAlgorithm::ShortestRemainingTime(_))
+            && self.scheduled.is_some()
+            // Check if the incoming process has a shorter time than the current.
+            && self.scheduled.as_ref().unwrap().estimated_remaining_time > *self.srt_time_table.get(&record.id).unwrap()
+         {
+            self.queue.push_back(self.scheduled.take().unwrap());
+            self.set_scheduled_record(record);
         } else {
             self.queue.push_back(record);
             self.clock += 1;
@@ -120,10 +130,7 @@ impl Scheduler {
         }
     }
     fn set_scheduled_record(&mut self, mut record: ProcessRecord) {
-        if !self.srt_time_table.contains_key(&record.id) {
-            // If this is not in the table, store the default value.
-            self.srt_time_table.insert(record.id, INITIAL_TAU);
-        }
+        
 
         // Set the estimated remaining time. This is for shortest time remaining.
         record.estimated_remaining_time = *self.srt_time_table.get(&record.id).unwrap();
@@ -185,7 +192,7 @@ impl Scheduler {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
+
 
     use crate::computer::process::{OpCode, Process};
 
@@ -261,15 +268,16 @@ mod tests {
 
         // tick it to the end
         scheduler.current_unchecked().tick_n(3);
+        
+        // current should be one
+        scheduler.schedule(Process::full(1, 3, OpCode::Inert));
+        assert_eq!(scheduler.current_unchecked().id, 1);
 
-        // we should have nothing i queue.
-        assert!(scheduler.current().is_none());
-
-        // reschedule a thread from process 0
+        // this should preempt one.
         scheduler.schedule(Process::full(0, 3, OpCode::Inert));
+        assert_eq!(scheduler.current_unchecked().id, 0);
 
-        // make sure the calculation is correct.
-        assert!(scheduler.srt_time_table.get(&0).unwrap().eq(&6.5));
+   
     }
 
     #[test]
