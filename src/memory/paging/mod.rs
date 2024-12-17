@@ -1,7 +1,26 @@
 use std::{ops::{Index, IndexMut}, slice::SliceIndex};
 
+use rand::random;
+
+pub mod local;
+
 pub struct Page {
+    /// This is the page number, we only use the first six bits of this.
+    page_number: u8,
+    /// The actual page data.
     data: [u8; 4096]
+}
+
+impl Page {
+    pub fn alloc() -> *const Self {
+        Box::leak(Box::new(Self {
+            page_number: random(),
+            data: [0u8; 4096]
+        })) as *const Self
+    }
+    pub fn page_number(&self) -> u8 {
+        self.page_number
+    }
 }
 
 impl<Idx: SliceIndex<[u8]>> Index<Idx> for Page {
@@ -40,9 +59,7 @@ impl PageAllocator {
         let mut page_list = vec![];
         let mut free_pages = vec![];
         for _ in 0..pages {
-            let ptr = Box::leak(Box::new(Page {
-                data: [0u8; 4096]
-            })) as *const Page;
+            let ptr = Page::alloc();
             page_list.push(ptr);
             free_pages.push(ptr);
         }
