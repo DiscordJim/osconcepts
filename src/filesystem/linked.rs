@@ -179,9 +179,8 @@ mod tests {
 
         assert_eq!(directory.read_file("josh"), [1,2,3]);
         assert_eq!(directory.read_file("josh2"), [0,3,6,9]);
-
-        directory.delete_file("josh", &mut alloc);
         
     }
 
+    
 }

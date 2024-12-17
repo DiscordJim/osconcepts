@@ -7,6 +7,7 @@ Operating System Concepts implemented in Rust
 3. There is a full multi-level feedback queue implementation.
 4. Disks including magnetic disks with FCFS, SSTF, SCAN, CSCAN, CLOOK.
 5. Raid configurations including RAID0, RAID1, RAID3, RAID4
+6. File allocation methods, specificially linked and indexed.
 
 # Examples
 1. `asyn_dynamic.rs` Asymmetric multiprogramming with dynamic dispatching along with processor affinities and non-uniform memory access (NUMA)
