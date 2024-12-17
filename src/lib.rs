@@ -5,6 +5,7 @@ use rand::{thread_rng, Rng};
 pub mod memory;
 pub mod computer;
 pub mod disks;
+pub mod filesystem;
 
 pub struct Delay;
 
