@@ -2,11 +2,14 @@ use std::{fmt::Debug, ops::Index, slice::SliceIndex};
 
 pub type Bit = bool;
 
-
+/// A bit vector that stores the bit values as booleans, this is
+/// for working with bits in an easy way.
 #[derive(Debug, Clone)]
 pub struct BitVec([bool; 8]);
 
 impl BitVec {
+    /// Calculates the parity of the bit vector by counting the ones
+    /// and informing us if they are odd.
     pub fn parity(&self) -> Bit {
         let mut ones = 0;
         for i in 0..self.0.len() {

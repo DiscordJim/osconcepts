@@ -3,7 +3,7 @@ use std::{collections::HashMap, ptr};
 
 const BLOCK_SIZE: usize = 2;
 
-
+#[derive(Default)]
 pub struct Directory {
     files: HashMap<String, IndexBlock>
 }
@@ -11,7 +11,7 @@ pub struct Directory {
 impl Directory {
     pub fn new() -> Self {
         Self {
-            files: HashMap::new()
+            ..Default::default()
         }
     }
     pub fn open_file(&mut self, name: String, alloc: &mut IndexedAllocator, data: &[u8]) {

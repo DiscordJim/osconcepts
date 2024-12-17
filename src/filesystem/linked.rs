@@ -3,7 +3,7 @@ use std::{collections::HashMap, ptr};
 
 const BLOCK_SIZE: usize = 2;
 
-
+#[derive(Default)]
 pub struct Directory {
     files: HashMap<String, *const Block>
 }
@@ -38,7 +38,7 @@ impl Block {
 }
 
 #[derive(Clone, Debug)]
-pub struct Block {
+struct Block {
     /// Points to the next block in the master list.
     next: *const Block,
     /// Points to the next block in a file.
@@ -92,7 +92,7 @@ impl LinkedAllocator {
     }
     
     /// Stores a file into the linked allocator.
-    pub fn store_file(&mut self, data: &[u8]) -> *const Block {
+    fn store_file(&mut self, data: &[u8]) -> *const Block {
         if self.free_list.is_empty() || self.free_list.len() < data.len() / BLOCK_SIZE {
             panic!("No more room in the allocator!");
         }
@@ -126,7 +126,7 @@ impl LinkedAllocator {
         ptr
     }
     /// Delete file
-    pub fn delete_file(&mut self, start: *const Block) {
+    fn delete_file(&mut self, start: *const Block) {
         let collected = Block::collect(start);
         for c in collected {
             let b = unsafe { &mut *c.cast_mut() };
@@ -136,7 +136,7 @@ impl LinkedAllocator {
         }
     }
     /// Reads a file by traversing the linked list.
-    pub fn read_file(start: *const Block) -> Vec<u8> {
+    fn read_file(start: *const Block) -> Vec<u8> {
         let mut current = start;
         let mut buffer = vec![];
         while !current.is_null() {

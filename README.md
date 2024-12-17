@@ -1,6 +1,8 @@
 # osconcepts
 Operating System Concepts implemented in Rust
 
+This is for demonstration purposes only.
+
 # Implementations
 1. Non-uniform memory (NUMA) is implemented simply using a random delay whenever we dereference into memory.
 2. There is a full scheduler implementation.
