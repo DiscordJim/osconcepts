@@ -7,6 +7,7 @@ use super::Page;
 /// to the page number and then the last 10 bits
 /// 
 /// This is designed for little endian.
+#[derive(Clone, Copy, PartialEq)]
 pub struct LogicalAddress(usize);
 
 impl LogicalAddress {

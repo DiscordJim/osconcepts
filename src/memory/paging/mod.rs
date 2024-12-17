@@ -3,6 +3,8 @@ use std::{ops::{Index, IndexMut}, slice::SliceIndex};
 use rand::random;
 
 pub mod local;
+pub mod table;
+pub mod pager;
 
 pub struct Page {
     /// This is the page number, we only use the first six bits of this.
@@ -67,6 +69,9 @@ impl PageAllocator {
             page_list,
             free_pages
         }
+    }
+    pub fn pages(&self) -> usize {
+        self.free_pages.len()
     }
     
     pub fn acquire(&mut self) -> *const Page {
