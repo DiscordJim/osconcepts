@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, ops::{Deref, DerefMut, Index, IndexMut}, slice::SliceIndex, sync::{Arc, Weak}};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, ops::{Index, IndexMut}, slice::SliceIndex, sync::{Arc, Weak}};
 
 use parking_lot::Mutex;
 use rand::random;
@@ -148,6 +148,27 @@ impl Pager {
 
 #[derive(Clone)]
 pub struct PagePtr(RawPagePtr, Weak<Mutex<PagerInternal>>);
+
+impl PagePtr {
+    pub fn addr(&self) -> usize {
+        self.0.0
+    }
+    pub unsafe fn from_raw(addr: usize, arc: &Pager) -> Self {
+        Self(RawPagePtr(addr), Arc::downgrade(&arc.internal))
+    }
+}
+
+impl PartialEq for PagePtr {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl Debug for PagePtr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl<Idx: SliceIndex<[u8]>> Index<Idx> for PagePtr {
     type Output = <Idx as SliceIndex<[u8]>>::Output;

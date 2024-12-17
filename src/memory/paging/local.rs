@@ -1,6 +1,6 @@
 use rand::random;
 
-use super::Page;
+use super::pager::{PagePtr, Pager};
 
 
 /// The logical address has the first 6 bits set
@@ -14,11 +14,11 @@ impl LogicalAddress {
     /// Creates a new logical address from a page pointer, it will
     /// return the real root (page number) of the address and the 
     /// logical address.
-    pub fn create(page: *const Page) -> (u16, Self) {
+    pub fn create(page: PagePtr) -> (u16, Self) {
         // Generate a local header address.
         let local_root: u16 = random();
 
-        let page_number = page as usize;
+        let page_number = page.addr() as usize;
 
         // Extract the real root.
         let clear_mask = (!0 as usize) << 16;
@@ -36,10 +36,10 @@ impl LogicalAddress {
         (self.0 & !clear_mask) as u16
     }
     /// Translate the local address ino an actual address with the real rooot.
-    pub fn translate(&self, real_root: u16) -> *const Page {
+    pub fn translate(&self, real_root: u16, pager: &Pager) -> PagePtr {
         // Recreate the actual pointer address.
         let real = (self.0 & ((!0 as usize) << 16)) | (real_root as usize);
-        real as *const Page
+        unsafe { PagePtr::from_raw(real, pager) }
     }
 }
 
@@ -47,16 +47,16 @@ impl LogicalAddress {
 
 #[cfg(test)]
 mod tests {
-    use crate::memory::paging::{local::LogicalAddress, PageAllocator};
+    use crate::memory::paging::{local::LogicalAddress, pager::Pager};
 
 
     #[test]
     pub fn test_logical_address() {
-        let mut allocator = PageAllocator::new(1);
-        let page_ptr = allocator.acquire();
+        let allocator = Pager::new(1);
+        let page_ptr = allocator.alloc();
 
-        let (root, log) = LogicalAddress::create(page_ptr);
+        let (root, log) = LogicalAddress::create(page_ptr.clone());
         
-        assert_eq!(page_ptr, log.translate(root));
+        assert_eq!(page_ptr, log.translate(root, &allocator));
     }
 }
