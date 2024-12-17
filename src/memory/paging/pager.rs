@@ -211,10 +211,15 @@ mod tests {
         // A test that uses the full API.
         let pager = Pager::new(1);
 
-        let m1 = pager.alloc();
+        let mut m1 = pager.alloc();
         let m2 = pager.alloc();
 
-        
+        assert_eq!(m1[0], 0);
+
+        m1[1] = 43;
+
+        assert_eq!(m1[1], 43);
+        assert_eq!(m2[1], 0);
         
     }
 
